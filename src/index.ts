@@ -2,7 +2,7 @@ import { createTelegramClient, disconnectClient, getClient } from "./client.js"
 import { resolveConfig } from "./config.js"
 import { decryptSession, isEncryptedSession } from "./crypto.js"
 
-import { sendTextReply, setupInboundHandler } from "./handler.js"
+import { sendTextReply, setupInboundHandler, type InboundMessage } from "./handler.js"
 
 interface ChannelPluginAPI {
 	config: Record<string, any>

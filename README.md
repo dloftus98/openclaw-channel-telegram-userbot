@@ -7,6 +7,8 @@ OpenClaw channel plugin that connects your **personal Telegram account** (not a 
 - **MTProto via GramJS** — full Telegram user API, not the limited Bot API
 - **Media support** — photos, videos, documents, voice, stickers, animations (inbound & outbound)
 - **Reply context** — AI sees the quoted message when someone replies
+- **Conversation memory** — multi-turn context with configurable history depth, persisted to disk
+- **System prompts** — per-chat or global system prompt for AI personality
 - **Markdown formatting** — bold, italic, code, strikethrough, spoilers in AI responses
 - **DM and group chat support** — with configurable mention requirements
 - **Machine-bound session encryption** — AES-256-GCM, sessions are useless on another device
@@ -87,6 +89,10 @@ openclaw plugins enable telegram-userbot
 | `groups` | object | `{}` | Per-group settings |
 | `groups.*.requireMention` | boolean | `false` | Only respond when mentioned |
 | `groups.*.enabled` | boolean | `true` | Enable/disable group |
+| `conversations.maxMessages` | number | `20` | Max messages per chat history |
+| `conversations.defaultSystemPrompt` | string | `""` | System prompt for all chats |
+| `conversations.systemPrompts` | object | `{}` | Per-chat system prompts |
+| `conversations.dataDir` | string | `~/.openclaw/telegram-userbot` | History storage path |
 
 ## Security
 

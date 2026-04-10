@@ -174,4 +174,38 @@ describe("conversation", () => {
 		expect(history).toHaveLength(1)
 		expect(history[0].text).toBe("persisted")
 	})
+
+	test("skips invalid messages on load", async () => {
+		const { writeFileSync } = await import("node:fs")
+		initConversations({ maxMessages: 10, dataDir: testDir })
+
+		// Write a file with mixed valid/invalid messages
+		const data = {
+			chatId: "chat1",
+			messages: [
+				{ role: "user", sender: "A", text: "valid", timestamp: 1 },
+				{ role: "bad_role", sender: "B", text: "invalid role", timestamp: 2 },
+				{ text: "missing fields" },
+				{ role: "assistant", sender: "Bot", text: "also valid", timestamp: 3 },
+			],
+		}
+		writeFileSync(join(testDir, "chat1.json"), JSON.stringify(data))
+
+		// Re-init should filter out invalid messages
+		initConversations({ maxMessages: 10, dataDir: testDir })
+		const history = getHistory("chat1")
+		expect(history).toHaveLength(2)
+		expect(history[0].text).toBe("valid")
+		expect(history[1].text).toBe("also valid")
+	})
+
+	test("gracefully handles unwritable dataDir", () => {
+		// Passing a path inside a nonexistent root that can't be created
+		// On most systems /proc is read-only
+		initConversations({ maxMessages: 10, dataDir: "/proc/fake-openclaw-test" })
+
+		// Should still work in memory-only mode
+		addMessage("chat1", { role: "user", sender: "A", text: "hello", timestamp: 1 })
+		expect(getHistory("chat1")).toHaveLength(1)
+	})
 })

@@ -10,8 +10,8 @@ import {
 	readdirSync,
 	readFileSync,
 	unlinkSync,
-	writeFileSync,
 } from "node:fs"
+import { writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
@@ -37,6 +37,10 @@ export interface ConversationConfig {
 const MIN_MAX_MESSAGES = 1
 const MAX_MAX_MESSAGES = 500
 
+/** Restrictive file permissions for chat history */
+const DIR_MODE = 0o700
+const FILE_MODE = 0o600
+
 const DEFAULT_CONFIG: ConversationConfig = {
 	maxMessages: 20,
 	dataDir: join(homedir(), ".openclaw", "telegram-userbot"),
@@ -52,6 +56,9 @@ const filenameToChat = new Map<string, string>()
 
 let _config: ConversationConfig = { ...DEFAULT_CONFIG }
 
+/** Whether disk persistence is available */
+let _persistenceEnabled = true
+
 /** Debounce timers for disk writes */
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const SAVE_DEBOUNCE_MS = 1000
@@ -62,6 +69,7 @@ export function resetConversations(): void {
 	filenameToChat.clear()
 	for (const timer of saveTimers.values()) clearTimeout(timer)
 	saveTimers.clear()
+	_persistenceEnabled = true
 }
 
 export function initConversations(raw: Record<string, any> = {}): void {
@@ -76,13 +84,21 @@ export function initConversations(raw: Record<string, any> = {}): void {
 		defaultSystemPrompt: String(raw.defaultSystemPrompt || ""),
 	}
 
-	// Ensure data dir exists
-	if (!existsSync(_config.dataDir)) {
-		mkdirSync(_config.dataDir, { recursive: true })
-	}
+	try {
+		// Ensure data dir exists with restrictive permissions
+		if (!existsSync(_config.dataDir)) {
+			mkdirSync(_config.dataDir, { recursive: true, mode: DIR_MODE })
+		}
 
-	// Load persisted conversations
-	loadFromDisk()
+		// Load persisted conversations
+		loadFromDisk()
+	} catch (error) {
+		console.warn(
+			`Conversation persistence disabled: unable to use data directory "${_config.dataDir}".`,
+			error,
+		)
+		_persistenceEnabled = false
+	}
 }
 
 /** Add a message to conversation history */
@@ -103,7 +119,9 @@ export function addMessage(chatId: string, message: ConversationMessage): void {
 	filenameToChat.set(sanitizeFilename(chatId), chatId)
 
 	// Debounced persist — avoids blocking on every message
-	debouncedSave(chatId)
+	if (_persistenceEnabled) {
+		debouncedSave(chatId)
+	}
 }
 
 /** Get conversation history for a chat */
@@ -141,6 +159,14 @@ export function buildContext(chatId: string): string {
 /** Clear history for a chat */
 export function clearHistory(chatId: string): void {
 	conversations.delete(chatId)
+
+	// Cancel any pending debounced save
+	const timer = saveTimers.get(chatId)
+	if (timer) {
+		clearTimeout(timer)
+		saveTimers.delete(chatId)
+	}
+
 	const filePath = join(_config.dataDir, `${sanitizeFilename(chatId)}.json`)
 	try {
 		unlinkSync(filePath)
@@ -162,6 +188,18 @@ function sanitizeFilename(chatId: string): string {
 	return chatId.replace(/[^a-zA-Z0-9_-]/g, "_")
 }
 
+/** Validate that an object conforms to ConversationMessage shape */
+function isValidMessage(msg: unknown): msg is ConversationMessage {
+	if (typeof msg !== "object" || msg === null) return false
+	const m = msg as Record<string, unknown>
+	return (
+		(m.role === "user" || m.role === "assistant") &&
+		typeof m.sender === "string" &&
+		typeof m.text === "string" &&
+		typeof m.timestamp === "number"
+	)
+}
+
 function debouncedSave(chatId: string): void {
 	const existing = saveTimers.get(chatId)
 	if (existing) clearTimeout(existing)
@@ -175,12 +213,12 @@ function debouncedSave(chatId: string): void {
 	)
 }
 
-function saveToDisk(chatId: string): void {
+async function saveToDisk(chatId: string): Promise<void> {
 	try {
 		const filePath = join(_config.dataDir, `${sanitizeFilename(chatId)}.json`)
 		const messages = conversations.get(chatId) || []
 		const data = { chatId, messages }
-		writeFileSync(filePath, JSON.stringify(data, null, 2))
+		await writeFile(filePath, JSON.stringify(data, null, 2), { mode: FILE_MODE })
 	} catch {
 		// Best-effort persistence
 	}
@@ -205,7 +243,8 @@ function loadFromDisk(): void {
 
 			// New format: { chatId, messages }
 			if (raw?.chatId && Array.isArray(raw.messages)) {
-				const trimmed = raw.messages.slice(-_config.maxMessages)
+				const valid = raw.messages.filter(isValidMessage)
+				const trimmed = valid.slice(-_config.maxMessages)
 				conversations.set(raw.chatId, trimmed)
 				filenameToChat.set(file.replace(".json", ""), raw.chatId)
 				continue
@@ -214,7 +253,8 @@ function loadFromDisk(): void {
 			// Legacy format: bare array — use filename as best-effort chatId
 			if (Array.isArray(raw)) {
 				const chatId = file.replace(".json", "")
-				const trimmed = raw.slice(-_config.maxMessages)
+				const valid = raw.filter(isValidMessage)
+				const trimmed = valid.slice(-_config.maxMessages)
 				conversations.set(chatId, trimmed)
 			}
 		} catch {

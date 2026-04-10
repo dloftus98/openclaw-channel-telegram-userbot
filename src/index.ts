@@ -1,5 +1,6 @@
 import { createTelegramClient, disconnectClient, getClient } from "./client.js"
 import { resolveConfig } from "./config.js"
+import { addMessage, buildContext, initConversations } from "./conversation.js"
 import { decryptSession, isEncryptedSession } from "./crypto.js"
 
 import {
@@ -47,6 +48,9 @@ export default function register(api: ChannelPluginAPI): void {
 
 		const client = await createTelegramClient(config)
 
+		// Initialize conversation memory
+		initConversations(config.conversations)
+
 		// Handle inbound messages from Telegram → OpenClaw
 		setupInboundHandler(client, config, (sessionId: string, message: InboundMessage) => {
 			// Build text with context
@@ -59,6 +63,18 @@ export default function register(api: ChannelPluginAPI): void {
 				text = text ? `${mediaDesc} ${text}` : mediaDesc
 			}
 
+			// Store in conversation history
+			addMessage(message.chatId, {
+				role: "user",
+				sender: message.senderName,
+				text,
+				timestamp: Date.now(),
+				messageId: message.messageId,
+			})
+
+			// Build context with conversation history
+			const context = buildContext(message.chatId)
+
 			api.dispatchReply(sessionId, {
 				sender: message.senderName,
 				text,
@@ -69,6 +85,7 @@ export default function register(api: ChannelPluginAPI): void {
 					isGroup: message.isGroup,
 					replyToMessageId: message.replyToMessageId,
 					media: message.media,
+					conversationContext: context,
 				},
 			})
 		})
@@ -83,7 +100,7 @@ export default function register(api: ChannelPluginAPI): void {
 			const chatId = parts[2]
 			if (!chatId) return
 
-			// If metadata contains a file path, send as media
+			// Send to Telegram, then store in history on success
 			if (metadata?.filePath) {
 				await sendMediaReply(
 					telegramClient,
@@ -96,6 +113,14 @@ export default function register(api: ChannelPluginAPI): void {
 			} else {
 				await sendTextReply(telegramClient, config, chatId, text, metadata?.replyToMessageId)
 			}
+
+			// Store assistant response after successful send
+			addMessage(chatId, {
+				role: "assistant",
+				sender: "Assistant",
+				text,
+				timestamp: Date.now(),
+			})
 		})
 
 		// Cleanup on shutdown

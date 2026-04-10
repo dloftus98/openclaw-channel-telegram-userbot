@@ -100,15 +100,7 @@ export default function register(api: ChannelPluginAPI): void {
 			const chatId = parts[2]
 			if (!chatId) return
 
-			// Store assistant response in conversation history
-			addMessage(chatId, {
-				role: "assistant",
-				sender: "Assistant",
-				text,
-				timestamp: Date.now(),
-			})
-
-			// If metadata contains a file path, send as media
+			// Send to Telegram, then store in history on success
 			if (metadata?.filePath) {
 				await sendMediaReply(
 					telegramClient,
@@ -121,6 +113,14 @@ export default function register(api: ChannelPluginAPI): void {
 			} else {
 				await sendTextReply(telegramClient, config, chatId, text, metadata?.replyToMessageId)
 			}
+
+			// Store assistant response after successful send
+			addMessage(chatId, {
+				role: "assistant",
+				sender: "Assistant",
+				text,
+				timestamp: Date.now(),
+			})
 		})
 
 		// Cleanup on shutdown

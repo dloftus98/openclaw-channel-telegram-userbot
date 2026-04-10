@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import { rmSync } from "node:fs"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { mkdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -12,11 +12,14 @@ import {
 	initConversations,
 } from "../conversation.js"
 
-const testDir = join(tmpdir(), `openclaw-test-${Date.now()}`)
+let testDir: string
+
+beforeEach(() => {
+	testDir = join(tmpdir(), `openclaw-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+	mkdirSync(testDir, { recursive: true })
+})
 
 afterEach(() => {
-	clearHistory("chat1")
-	clearHistory("chat2")
 	try {
 		rmSync(testDir, { recursive: true })
 	} catch {}
@@ -141,9 +144,29 @@ describe("conversation", () => {
 		expect(buildContext("nonexistent")).toBe("")
 	})
 
-	test("persistence — reload from disk", () => {
+	test("clamps invalid maxMessages", () => {
+		initConversations({ maxMessages: -5, dataDir: testDir })
+		// Should clamp to 1 minimum
+		for (let i = 0; i < 3; i++) {
+			addMessage("chat1", { role: "user", sender: "A", text: `msg ${i}`, timestamp: i })
+		}
+		expect(getHistory("chat1")).toHaveLength(1)
+		expect(getHistory("chat1")[0].text).toBe("msg 2")
+	})
+
+	test("handles NaN maxMessages gracefully", () => {
+		initConversations({ maxMessages: "notanumber", dataDir: testDir })
+		// Should fallback to default (20)
+		addMessage("chat1", { role: "user", sender: "A", text: "test", timestamp: 1 })
+		expect(getHistory("chat1")).toHaveLength(1)
+	})
+
+	test("persistence — reload from disk", async () => {
 		initConversations({ maxMessages: 10, dataDir: testDir })
 		addMessage("chat1", { role: "user", sender: "A", text: "persisted", timestamp: 1 })
+
+		// Wait for debounced save
+		await new Promise((resolve) => setTimeout(resolve, 1500))
 
 		// Re-init should load from disk
 		initConversations({ maxMessages: 10, dataDir: testDir })

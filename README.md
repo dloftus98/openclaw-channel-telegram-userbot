@@ -104,6 +104,8 @@ Override with a custom key:
 export OPENCLAW_TELEGRAM_SESSION_KEY=my-secret-key
 ```
 
+**Conversation data:** History is stored in `~/.openclaw/telegram-userbot/` as JSON files. These may contain sensitive chat content. Ensure appropriate file permissions on multi-user systems.
+
 **Recommendations:**
 - Use a secondary Telegram account
 - Check Telegram → Settings → Devices periodically

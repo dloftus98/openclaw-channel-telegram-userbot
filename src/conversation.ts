@@ -4,13 +4,7 @@
  * Persists to disk (JSON) between restarts.
  */
 
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	unlinkSync,
-} from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "node:fs"
 import { writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"

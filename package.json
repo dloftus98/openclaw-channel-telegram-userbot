@@ -27,7 +27,9 @@
   "author": "overpod",
   "openclaw": {
     "type": "channel",
-    "id": "telegram-userbot"
+    "id": "telegram-userbot",
+    "extensions": ["./src/index.ts"],
+    "hooks": ["./src/hooks.ts"]
   },
   "dependencies": {
     "node-machine-id": "^1.1.12",

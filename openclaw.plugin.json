@@ -21,15 +21,16 @@
       },
       "sessionString": {
         "type": "string",
-        "description": "GramJS session string (run: bun run src/auth.ts)",
-        "format": "password"
+        "description": "GramJS session string (run: bun run src/auth.ts)"
       },
       "allowFrom": {
         "type": "array",
         "items": {
           "type": "string"
         },
-        "default": ["*"],
+        "default": [
+          "*"
+        ],
         "description": "Allowed chat IDs (* = all)"
       },
       "denyFrom": {
@@ -56,7 +57,6 @@
         "description": "Conversation memory settings"
       }
     },
-    "required": ["apiId", "apiHash", "sessionString"],
     "additionalProperties": false
   }
 }

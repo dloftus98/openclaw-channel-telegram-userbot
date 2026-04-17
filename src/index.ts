@@ -557,12 +557,13 @@ const messagingAdapter: ChannelMessagingAdapter = {
 	resolveOutboundSessionRoute(params) {
 		const target = parseTelegramTarget(params.resolvedTarget?.to ?? params.target)
 		if (!target) return null
+		const resolvedAccountId = resolveTelegramUserbotAccount(params.cfg, params.accountId).accountId
 
 		return buildChannelOutboundSessionRoute({
 			cfg: params.cfg,
 			agentId: params.agentId,
 			channel: CHANNEL_ID,
-			accountId: params.accountId ?? DEFAULT_ACCOUNT_ID,
+			accountId: resolvedAccountId,
 			peer: {
 				kind: target.chatType === "direct" ? "direct" : "group",
 				id: target.chatId,

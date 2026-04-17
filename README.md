@@ -18,15 +18,19 @@ OpenClaw channel plugin that connects your **personal Telegram account** (not a 
 
 ## Requirements
 
-- OpenClaw >= 2026.3.0
+- OpenClaw >= 2026.4.14
 - Telegram API credentials from [my.telegram.org](https://my.telegram.org)
 - Bun >= 1.0 or Node.js >= 22
 
 ## Installation
 
 ```bash
-openclaw plugins install openclaw-channel-telegram-userbot
+npm install
+npm run build
+openclaw plugins install --force .
 ```
+
+This plugin is packaged as a standard external OpenClaw channel and installs from the local repo or from the generated `.tgz` tarball.
 
 ## Setup
 
@@ -38,7 +42,7 @@ Go to [my.telegram.org](https://my.telegram.org), create an app, and note the `a
 
 ```bash
 cd openclaw-channel-telegram-userbot
-bun run src/auth.ts
+npm run auth
 ```
 
 Follow the prompts to log in. You'll receive a session string (optionally encrypted with your machine ID).
@@ -75,6 +79,8 @@ Or add to `~/.openclaw/openclaw.json`:
 ```bash
 openclaw plugins enable telegram-userbot
 ```
+
+This plugin does not currently participate in OpenClaw's interactive setup wizard. Configure `channels.telegram-userbot.*` directly, then enable it.
 
 ## Configuration
 
@@ -115,11 +121,12 @@ export OPENCLAW_TELEGRAM_SESSION_KEY=my-secret-key
 ## Development
 
 ```bash
-bun install
-bun run lint         # check code with Biome
-bun run lint:fix     # auto-fix
-bun run typecheck    # TypeScript check
-bun test             # run tests
+npm install
+npm run build        # compile dist/
+npm run typecheck    # TypeScript check
+npm test             # run tests
+npm run lint         # check code with Biome
+npm run lint:fix     # auto-fix
 ```
 
 ## License

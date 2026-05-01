@@ -66,8 +66,14 @@ Or add to `~/.openclaw/openclaw.json`:
       sessionString: "1BQA...",
       allowFrom: ["*"],
       replyDelaySec: 2,
+      conversations: {
+        defaultSystemPrompt: "Reply as a concise, practical assistant."
+      },
       groups: {
-        "*": { requireMention: true }
+        "*": { requireMention: true },
+        "-1001234567890": {
+          systemPrompt: "This is a work group. Keep replies brief and professional."
+        }
       }
     }
   }
@@ -95,9 +101,10 @@ This plugin does not currently participate in OpenClaw's interactive setup wizar
 | `groups` | object | `{}` | Per-group settings |
 | `groups.*.requireMention` | boolean | `false` | Only respond when mentioned |
 | `groups.*.enabled` | boolean | `true` | Enable/disable group |
+| `groups.*.systemPrompt` | string | `""` | Extra system prompt appended for that group |
 | `conversations.maxMessages` | number | `20` | Max messages per chat history |
-| `conversations.defaultSystemPrompt` | string | `""` | System prompt for all chats |
-| `conversations.systemPrompts` | object | `{}` | Per-chat system prompts |
+| `conversations.defaultSystemPrompt` | string | `""` | Default system prompt for all chats |
+| `conversations.systemPrompts` | object | `{}` | Per-chat prompt overrides keyed by Telegram chat ID |
 | `conversations.dataDir` | string | `~/.openclaw/telegram-userbot` | History storage path |
 
 ## Security

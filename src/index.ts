@@ -5,19 +5,19 @@ import { fileURLToPath } from "node:url"
 
 import {
 	buildChannelOutboundSessionRoute,
-	defineChannelPluginEntry,
 	type ChannelAccountSnapshot,
 	type ChannelMessagingAdapter,
 	type ChannelOutboundAdapter,
 	type ChannelPlugin,
+	defineChannelPluginEntry,
 	type OpenClawConfig,
 	type PluginRuntime,
 } from "openclaw/plugin-sdk/core"
 import { dispatchInboundReplyWithBase } from "openclaw/plugin-sdk/inbound-reply-dispatch"
 import { resolvePayloadMediaUrls } from "openclaw/plugin-sdk/reply-payload"
+import { Api, type TelegramClient } from "telegram"
 import { NewMessage, Raw } from "telegram/events/index.js"
 import { UpdateConnectionState } from "telegram/network/index.js"
-import { Api, type TelegramClient } from "telegram"
 
 import {
 	createTelegramClient,
@@ -26,14 +26,20 @@ import {
 	disconnectClientInstance,
 	getClient,
 } from "./client.js"
-import { getGroupConfig, isChatAllowed, resolveConfig, type PluginConfig } from "./config.js"
+import {
+	getGroupConfig,
+	isChatAllowed,
+	type PluginConfig,
+	resolveChatSystemPrompt,
+	resolveConfig,
+} from "./config.js"
 import { decryptSession, isEncryptedSession } from "./crypto.js"
 import {
 	downloadMedia,
-	sendMediaReply,
-	sendTextReply,
 	type InboundMessage,
 	type MediaAttachment,
+	sendMediaReply,
+	sendTextReply,
 } from "./handler.js"
 
 const CHANNEL_ID = "telegram-userbot"
@@ -140,14 +146,18 @@ function resolveDefaultAccountId(cfg: OpenClawConfig): string {
 	return listConfiguredAccountIds(cfg)[0] ?? DEFAULT_ACCOUNT_ID
 }
 
-function resolveRawAccountConfig(cfg: OpenClawConfig, accountId?: string | null): {
+function resolveRawAccountConfig(
+	cfg: OpenClawConfig,
+	accountId?: string | null,
+): {
 	accountId: string
 	raw: Record<string, unknown>
 } {
 	const section = getChannelSection(cfg)
 	const preferredAccountId = normalizeAccountId(accountId)
 	const resolvedAccountId =
-		preferredAccountId === DEFAULT_ACCOUNT_ID && getAccountSection(section, resolveDefaultAccountId(cfg))
+		preferredAccountId === DEFAULT_ACCOUNT_ID &&
+		getAccountSection(section, resolveDefaultAccountId(cfg))
 			? resolveDefaultAccountId(cfg)
 			: preferredAccountId
 	const accountSection = getAccountSection(section, resolvedAccountId)
@@ -253,7 +263,10 @@ function parseTelegramTarget(raw: string): {
 	let value = raw.trim()
 	if (!value) return null
 
-	value = value.replace(/^telegram-userbot:/i, "").replace(/^telegram:/i, "").trim()
+	value = value
+		.replace(/^telegram-userbot:/i, "")
+		.replace(/^telegram:/i, "")
+		.trim()
 	if (!value) return null
 
 	let chatType: "direct" | "group" = "direct"
@@ -267,11 +280,7 @@ function parseTelegramTarget(raw: string): {
 	) {
 		chatType = "group"
 		value = value.slice(value.indexOf(":") + 1).trim()
-	} else if (
-		lower.startsWith("user:") ||
-		lower.startsWith("u:") ||
-		lower.startsWith("dm:")
-	) {
+	} else if (lower.startsWith("user:") || lower.startsWith("u:") || lower.startsWith("dm:")) {
 		chatType = "direct"
 		value = value.slice(value.indexOf(":") + 1).trim()
 	} else if (value.startsWith("-")) {
@@ -293,9 +302,7 @@ function buildMediaDescription(media?: MediaAttachment): string | undefined {
 		media.fileName,
 		typeof media.duration === "number" ? `${media.duration}s` : undefined,
 	].filter(Boolean)
-	return detailParts.length > 0
-		? `[${media.type}: ${detailParts.join(", ")}]`
-		: `[${media.type}]`
+	return detailParts.length > 0 ? `[${media.type}: ${detailParts.join(", ")}]` : `[${media.type}]`
 }
 
 function buildInboundBody(message: InboundMessage): string {
@@ -325,7 +332,10 @@ async function resolveSenderName(client: TelegramClient, senderId: string): Prom
 	return senderId
 }
 
-async function resolveChatTitle(client: TelegramClient, peer: Api.TypePeer | undefined): Promise<string | undefined> {
+async function resolveChatTitle(
+	client: TelegramClient,
+	peer: Api.TypePeer | undefined,
+): Promise<string | undefined> {
 	if (!peer) return undefined
 
 	try {
@@ -616,10 +626,12 @@ const outboundAdapter: ChannelOutboundAdapter = {
 			})
 		}
 
-		return lastResult ?? {
-			channel: CHANNEL_ID,
-			messageId: "noop",
-		}
+		return (
+			lastResult ?? {
+				channel: CHANNEL_ID,
+				messageId: "noop",
+			}
+		)
 	},
 }
 
@@ -758,6 +770,7 @@ const gatewayAdapter: NonNullable<ChannelPlugin<TelegramUserbotAccount>["gateway
 					sessionKey: route.sessionKey,
 				})
 				const bodyForAgent = buildInboundBody(inboundMessage)
+				const systemPrompt = resolveChatSystemPrompt(config, chatId, isGroup)
 				const timestamp = resolveMessageTimestamp(message)
 				const conversationLabel = isGroup
 					? chatTitle || `group:${chatId}`
@@ -791,6 +804,7 @@ const gatewayAdapter: NonNullable<ChannelPlugin<TelegramUserbotAccount>["gateway
 					ChatType: isGroup ? "group" : "direct",
 					ConversationLabel: conversationLabel,
 					GroupSubject: isGroup ? conversationLabel : undefined,
+					GroupSystemPrompt: systemPrompt,
 					SenderName: senderName,
 					SenderId: senderId,
 					ReplyToId: inboundMessage.replyToMessageId
@@ -830,7 +844,7 @@ const gatewayAdapter: NonNullable<ChannelPlugin<TelegramUserbotAccount>["gateway
 									cfg: ctx.cfg,
 									accountId: ctx.account.accountId,
 									to: target,
-									text: index === 0 ? payload.text ?? "" : "",
+									text: index === 0 ? (payload.text ?? "") : "",
 									mediaUrl,
 									replyToId: payload.replyToId ?? ctxPayload.ReplyToId ?? null,
 								})
@@ -923,8 +937,7 @@ function extractInboundMedia(message: Api.Message): MediaAttachment | undefined 
 			type: "photo",
 			fileId: media.photo.id.toString(),
 			fileSize: media.photo.sizes?.reduce((max: number, size: Api.TypePhotoSize) => {
-				const currentSize =
-					"size" in size && typeof size.size === "number" ? size.size : max
+				const currentSize = "size" in size && typeof size.size === "number" ? size.size : max
 				return Math.max(max, currentSize)
 			}, 0),
 		}
@@ -1070,8 +1083,8 @@ const telegramUserbotPlugin: ChannelPlugin<TelegramUserbotAccount> = {
 			return formatAllowFrom(allowFrom)
 		},
 		hasConfiguredState({ cfg }) {
-			return listConfiguredAccountIds(cfg).some((accountId) =>
-				resolveTelegramUserbotAccount(cfg, accountId).configured,
+			return listConfiguredAccountIds(cfg).some(
+				(accountId) => resolveTelegramUserbotAccount(cfg, accountId).configured,
 			)
 		},
 	},
